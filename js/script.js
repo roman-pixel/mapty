@@ -1,8 +1,19 @@
 "use strict";
 
+// TODO
+// edit, delete and delete all waotkouts
+// sort workouts by a certian field
+// re-build Running amd Cycling objects coming from local storage
+// more realistic error and confirmation messages
+// ability to position the map to show all workouts
+// ability to draw lines and shapes instead of just points
+// geocode location from coordinates ('Run in Faro, Portugal') [only after asynchtonous JS section]
+// display weather data for workout time and place [only after asynchtonous JS section]
+
 class Workout {
   date = new Date();
   id = (Date.now() + "").slice(-10);
+  clicks = 0;
 
   constructor(coords, distance, duration) {
     this.coords = coords; // [lat, lng]
@@ -17,6 +28,10 @@ class Workout {
     this.description = `${this.type[0].toUpperCase()}${this.type.slice(1)} on ${
       months[this.date.getMonth()]
     } ${this.date.getDate()}`;
+  }
+
+  click() {
+    this.clicks++;
   }
 }
 
@@ -54,10 +69,6 @@ class Cycling extends Workout {
   }
 }
 
-// const run1 = new Running([39, -12], 5.2, 24, 178);
-// const Cycling1 = new Cycling([39, -12], 27, 95, 523);
-// console.log(run1, Cycling1);
-
 ///////////////////////////
 // APPLICATION ARCHITECTURE
 const form = document.querySelector(".form");
@@ -70,13 +81,20 @@ const inputElevation = document.querySelector(".form__input--elevation");
 
 class App {
   #map;
+  #mapZoomLevel = 13;
   #mapEvent;
   #workouts = [];
 
   constructor() {
+    // Get user's position
     this._getPosition();
+
+    // Get data from local storage
+    this._getLocalStorage();
+
     form.addEventListener("submit", this._newWorkout.bind(this));
     inputType.addEventListener("change", this._toggleElevationField);
+    containerWorkouts.addEventListener("click", this._moveToPopup.bind(this));
   }
 
   _getPosition() {
@@ -95,11 +113,9 @@ class App {
     const { latitude } = position.coords;
     const { longitude } = position.coords;
 
-    // console.log(`https://www.google.com/maps/@${latitude},${longitude}`);
-
     const coords = [latitude, longitude];
 
-    this.#map = L.map("map").setView(coords, 13);
+    this.#map = L.map("map").setView(coords, this.#mapZoomLevel);
 
     // GOOGLE MAPS
     // L.tileLayer("http://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
@@ -115,6 +131,10 @@ class App {
 
     // Handlich click on map
     this.#map.on("click", this._showForm.bind(this));
+
+    this.#workouts.forEach((work) => {
+      this._renderWorkoutMarker(work);
+    });
   }
 
   _showForm(mapE) {
@@ -191,6 +211,9 @@ class App {
 
     // Clear input fields
     this._hideForm();
+
+    // Set local storage to all workouts
+    this._setLocalStorage();
   }
 
   _renderWorkoutMarker(workout) {
@@ -213,7 +236,11 @@ class App {
 
   _renderWorkout(workout) {
     let html = `
-        <li class="workout workout--${workout.type}" data-id="${workout.id}">
+        <li 
+          class="workout workout--${workout.type}" 
+          data-id="${workout.id}"
+          title="Click to move"
+        >
         <h2 class="workout__title">${workout.description}</h2>
         <div class="workout__details">
           <span class="workout__icon">${
@@ -261,6 +288,45 @@ class App {
     }
 
     form.insertAdjacentHTML("afterend", html);
+  }
+
+  _moveToPopup(e) {
+    const workoutEl = e.target.closest(".workout");
+
+    if (!workoutEl) return;
+
+    const workout = this.#workouts.find(
+      (work) => work.id === workoutEl.dataset.id
+    );
+
+    this.#map.setView(workout.coords, this.#mapZoomLevel, {
+      animate: true,
+      pan: { duration: 1 },
+    });
+
+    // using the public interface
+    workout.click();
+  }
+
+  _setLocalStorage() {
+    localStorage.setItem("workouts", JSON.stringify(this.#workouts));
+  }
+
+  _getLocalStorage() {
+    const data = JSON.parse(localStorage.getItem("workouts"));
+
+    if (!data) return;
+
+    this.#workouts = data;
+
+    this.#workouts.forEach((work) => {
+      this._renderWorkout(work);
+    });
+  }
+
+  reset() {
+    localStorage.removeItem("workouts");
+    location.reload();
   }
 }
 
